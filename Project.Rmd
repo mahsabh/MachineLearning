@@ -1,0 +1,119 @@
+---
+title: "Practical Machine Learning - Project"
+author: "MahsaBH"
+date: "Thursday, July 24, 2014"
+output: html_document
+---
+In this project, our goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har
+
+The goal of our project is to predict the manner in which they did the exercise.This is the "classe" variable in the training set. We may use any of the other variables to predict with.
+
+Here we load the data:
+
+```{r , cache=TRUE}
+data_training<-read.csv("./pml-training.csv")
+data_testing<-read.csv("./pml-testing.csv")
+```
+
+Let's load the required libraries and see how big our data set is: 
+```{r , cache=TRUE}
+library(AppliedPredictiveModeling)
+library(caret)
+dim(data_training)
+set.seed(124)
+```
+
+I have a set a seed  to get same random samples whenever I run my code. 
+
+```{r , cache=TRUE}
+##get rid of empty cells 
+emptyCells<-which(data_training=="",arr.ind = TRUE)
+data_training[emptyCells]<- NA 
+```
+
+The dataset contains many empty cells. I have filled them out with "NA" so that I can get rid of the empty cells and those originally with "NA" values all together. 
+Here is a for-loop to subset a new data frame which excludes columns with more than 18000 "NA" values:
+
+```{r , cache=TRUE}
+##get rid of NA
+new_data_training <- data.frame(row.names=1:19622)
+x<-c()
+for (i in 1:ncol(data_training)){
+  count <- length(data_training[data_training[,i]=="NA",i])
+  if (count>18000) {
+    x<-append(x,i)
+  }
+}
+new_data_training<-data_training[,-x]
+dim(new_data_training)
+class(new_data_training)
+names(new_data_training)
+```
+
+We should also exclude columns with non-numeric non-integer values, which I did it here manually:
+
+```{r}
+new_data_training1<-new_data_training[,-c(1,2,5,6)]
+names(new_data_training1)
+```
+
+Now it is time to subset our modified training data set into "training" and "testing", so that we can test our model accuracy later: 
+
+```{r, cache=TRUE}
+##cross validation
+inTrain <- createDataPartition(y=new_data_training1$classe,
+                               p=0.80, list=FALSE)
+training <- new_data_training1[inTrain,]
+testing <- new_data_training1[-inTrain,]
+dim(training)
+
+```
+
+As we have many variables we should use pre-processing methods to recognize those which are correlated with each other. I used "Principal Components Analysis".
+
+```{r , cache=TRUE}
+## find correlated variables 
+preProc <- preProcess(training[,-56],method="pca",thresh = 0.95)
+preProc
+trainTransformed <- predict(preProc, training[,-56])
+dim(trainTransformed)
+```
+As we can see we can capture 95% of variabilty in our data by using 26 components which is much less than the original number 56. 
+
+Now that we have smaller number of predictors we can built our model : 
+```{r , cache=TRUE}
+##model
+library(randomForest)
+modelFit <- train(training$classe ~ ., data = trainTransformed, method="rf")
+modelFit
+```
+
+In order to cross validate our model we can apply our model to our testing set, the one which is extracted from our original training data:
+```{r, cache=TRUE}
+##Accuracy 
+testTransformed <- predict(preProc,testing[,-56])
+predicts<-predict(modelFit,testTransformed)
+confusionMatrix(testing$classe,predicts)
+```
+We have a model with 98% accuracy. 
+
+```{r , cache=TRUE}
+##pre-process the test data set 
+new_data_testing<-data_testing[,-x]
+dim(new_data_testing)
+class(new_data_testing)
+names(new_data_testing)
+new_data_testing1<-new_data_testing[,-c(1,2,5,6)]
+dim(new_data_testing1)
+Transformed <- predict(preProc, new_data_testing1[,-56])
+
+```
+
+Here we can see our predictions for the real test set: 
+
+```{r, cache=TRUE}
+predictions <- predict(modelFit,newdata=Transformed)
+predictions
+```
+
+
